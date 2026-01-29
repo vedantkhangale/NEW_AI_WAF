@@ -1,0 +1,165 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database for request logs and analytics
+  postgres:
+    image: postgres:15-alpine
+    container_name: aegisx-postgres
+    environment:
+      POSTGRES_DB: aegisx_waf
+      POSTGRES_USER: waf_user
+      POSTGRES_PASSWORD: waf_secure_pass_2026
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./waf-engine/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - aegisx_network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U waf_user -d aegisx_waf" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for IP reputation and caching
+  redis:
+    image: redis:7-alpine
+    container_name: aegisx-redis
+    command: redis-server --appendonly yes --requirepass redis_secure_2026
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - aegisx_network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # AI Service - LightGBM inference engine
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: aegisx-ai
+    environment:
+      - MODEL_PATH=/app/models/lgbm_waf_model.pkl
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=redis_secure_2026
+    volumes:
+      - ./ai-service/models:/app/models
+      - ./ai-service/training_data:/app/training_data
+    ports:
+      - "5001:5001"
+    networks:
+      - aegisx_network
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:5001/health" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # WAF Engine - FastAPI backend
+  waf-engine:
+    build:
+      context: ./waf-engine
+      dockerfile: Dockerfile
+    container_name: aegisx-waf-engine
+    environment:
+      - DATABASE_URL=postgresql://waf_user:waf_secure_pass_2026@postgres:5432/aegisx_waf
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=redis_secure_2026
+      - AI_SERVICE_URL=http://ai-service:5001
+      - SERVER_LAT=18.5204
+      - SERVER_LON=73.8567
+    volumes:
+      - ./geoip:/app/geoip:ro
+      - ./waf-engine:/app
+    ports:
+      - "5000:5000"
+    networks:
+      - aegisx_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:5000/health" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # OpenResty Edge Proxy with Lua
+  nginx-proxy:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: aegisx-nginx
+    environment:
+      - WAF_ENGINE_URL=http://waf-engine:5000
+    volumes:
+      - ./nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
+      - ./nginx/lua:/usr/local/openresty/nginx/lua:ro
+      - ./geoip:/usr/local/geoip:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - aegisx_network
+    depends_on:
+      waf-engine:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # React Dashboard
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: aegisx-dashboard
+    environment:
+      - REACT_APP_WS_URL=ws://localhost:5000/ws
+      - REACT_APP_API_URL=http://localhost:5000/api
+    ports:
+      - "3000:3000"
+    networks:
+      - aegisx_network
+    depends_on:
+      - waf-engine
+
+  # Attack Simulator (separate network for real testing)
+  simulator:
+    build:
+      context: ./simulator
+      dockerfile: Dockerfile
+    container_name: aegisx-simulator
+    environment:
+      - TARGET_URL=http://nginx-proxy:80
+    ports:
+      - "8080:8080"
+    networks:
+      - aegisx_network
+      - simulator_network
+
+networks:
+  aegisx_network:
+    driver: bridge
+  simulator_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
