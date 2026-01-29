@@ -230,15 +230,23 @@ class DecisionEngine:
             (r'/etc/passwd', 'LFI', 'CRITICAL'),
             (r'/windows/win.ini', 'LFI', 'CRITICAL'),
             
-            # XSS
-            (r'<script>', 'XSS', 'CRITICAL'),
+            # XSS - Enhanced patterns including URL-encoded
+            (r'<script', 'XSS', 'CRITICAL'),  # Case insensitive via re.IGNORECASE
+            (r'%3Cscript', 'XSS', 'CRITICAL'),  # URL-encoded <script
             (r'javascript:', 'XSS', 'CRITICAL'),
-            (r'<img\s+[^>]*onerror', 'XSS', 'CRITICAL'),
-            (r'<svg\s+[^>]*onload', 'XSS', 'CRITICAL'),
+            (r'%6A%61%76%61%73%63%72%69%70%74', 'XSS', 'CRITICAL'),  # URL-encoded javascript
+            (r'<img[^>]*onerror', 'XSS', 'CRITICAL'),
+            (r'%3Cimg', 'XSS', 'CRITICAL'),
+            (r'<svg[^>]*onload', 'XSS', 'CRITICAL'),
+            (r'%3Csvg', 'XSS', 'CRITICAL'),
             (r'<iframe', 'XSS', 'HIGH'),
+            (r'%3Ciframe', 'XSS', 'HIGH'),
             (r'on\w+\s*=', 'XSS', 'HIGH'),  # Generic event handler
             (r'alert\(', 'XSS', 'MEDIUM'),
             (r'document\.cookie', 'XSS', 'CRITICAL'),
+            (r'eval\(', 'XSS', 'HIGH'),
+            (r'expression\(', 'XSS', 'HIGH'),  # CSS expression
+
             
             # SQL Injection
             (r'UNION\s+SELECT', 'SQL_INJECTION', 'CRITICAL'),

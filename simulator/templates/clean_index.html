@@ -292,12 +292,14 @@
             const div = document.createElement('div');
             div.className = 'result-item';
             div.innerHTML = `
-                <div>
+                <div style="flex:1">
                     <span style="font-weight:bold">${r.attack_type}</span>
                     <br>
                     <small style="color:#94a3b8">${r.ip} (${r.country})</small>
+                    <br>
+                    <small style="color:#64748b; font-size:0.75em">Payload: ${r.payload || 'N/A'}</small>
                 </div>
-                <div class="${r.blocked ? 'blocked' : 'allowed'}" style="font-weight:bold">
+                <div class="${r.blocked ? 'blocked' : 'allowed'}" style="font-weight:bold; white-space:nowrap">
                     ${r.blocked ? 'BLOCKED 🛡️' : 'ALLOWED ⚠️'}
                 </div>
             `;

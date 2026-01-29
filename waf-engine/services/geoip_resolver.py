@@ -28,44 +28,48 @@ class GeoIPResolver:
         """Check if database is loaded"""
         return self.reader is not None
     
+    
     def resolve(self, ip_address: str) -> Dict[str, Any]:
         """
         Resolve IP address to geographic location
         Returns dict with: country_code, city, latitude, longitude
         """
-        if not self.reader:
-            return self._mock_resolve(ip_address)
-        
-        # Skip this check so we can mock locations for private IPs too
-        # if ip_address in ['127.0.0.1', 'localhost'] or ip_address.startswith('192.168.'): ...
-        
+        # specialized mock logic for local IPs
+        if ip_address in ['127.0.0.1', 'localhost'] or ip_address.startswith('192.168.') or ip_address.startswith('172.'):
+             return self._mock_resolve(ip_address)
+
+        # Try local DB first
+        if self.reader:
+            try:
+                response = self.reader.city(ip_address)
+                return {
+                    'country_code': response.country.iso_code or 'XX',
+                    'country_name': response.country.name or 'Unknown',
+                    'city': response.city.name or 'Unknown',
+                    'latitude': response.location.latitude or 0.0,
+                    'longitude': response.location.longitude or 0.0,
+                    'is_private': False
+                }
+            except (geoip2.errors.AddressNotFoundError, ValueError):
+                pass # Try external
+            except Exception as e:
+                logger.error(f"Error resolving IP {ip_address} locally: {e}")
+
+        # Fallback to external API if DB missing or IP not found
         try:
-            response = self.reader.city(ip_address)
-            
-            return {
-                'country_code': response.country.iso_code or 'XX',
-                'country_name': response.country.name or 'Unknown',
-                'city': response.city.name or 'Unknown',
-                'latitude': response.location.latitude or 0.0,
-                'longitude': response.location.longitude or 0.0,
-                'is_private': False
-            }
-        except (geoip2.errors.AddressNotFoundError, ValueError):
-            # If not found in DB (e.g. private IP that wasn't caught above), use mock data
-            # This ensures the map looks good even with local Docker IPs
-            logger.warning(f"IP {ip_address} not found in GeoIP DB, using mock data")
-            return self._mock_resolve(ip_address)
+            return self._resolve_external(ip_address)
         except Exception as e:
-            logger.error(f"Error resolving IP {ip_address}: {e}")
-            return self._default_response()
+            logger.warning(f"External resolution failed for {ip_address}: {e}")
+            return self._mock_resolve(ip_address)
     
+    def _resolve_external(self, ip_address: str) -> Dict[str, Any]:
+        """Resolve using external API (cached)"""
+        return get_external_geo(ip_address)
+
     def _mock_resolve(self, ip_address: str) -> Dict[str, Any]:
         """Mock resolution - Deterministic based on IP prefix"""
         # Prefixes for simulator to use
-        # 10.1.x.x -> US
-        # 10.2.x.x -> China
-        # 10.3.x.x -> Russia
-        # etc.
+        # ... (keep existing mock logic) ...
         
         mock_db = {
             "10.1.": {"code": "US", "name": "United States", "city": "San Francisco", "lat": 37.77, "lon": -122.41},
@@ -127,3 +131,33 @@ class GeoIPResolver:
         if self.reader:
             self.reader.close()
             logger.info("GeoIP database closed")
+
+# Independent cached function
+import httpx
+from functools import lru_cache
+
+@lru_cache(maxsize=1024)
+def get_external_geo(ip_address: str) -> Dict[str, Any]:
+    """
+    Fetch geolocation from ip-api.com
+    Cached to avoid rate limits (45 requests/minute limit on free tier)
+    """
+    try:
+        # Use sync client for compatibility with sync resolve method
+        with httpx.Client(timeout=3.0) as client:
+            response = client.get(f"http://ip-api.com/json/{ip_address}")
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('status') == 'success':
+                    return {
+                        'country_code': data.get('countryCode', 'XX'),
+                        'country_name': data.get('country', 'Unknown'),
+                        'city': data.get('city', 'Unknown'),
+                        'latitude': float(data.get('lat', 0.0)),
+                        'longitude': float(data.get('lon', 0.0)),
+                        'is_private': False
+                    }
+    except Exception as e:
+        logger.warning(f"IP-API lookup failed: {e}")
+        
+    raise Exception("External lookup failed")

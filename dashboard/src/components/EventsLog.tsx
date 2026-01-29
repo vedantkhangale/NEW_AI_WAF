@@ -132,10 +132,10 @@ export default function EventsLog() {
                                     key={log.id}
                                     className="hover:bg-slate-800/50 transition-colors cursor-pointer"
                                     onClick={() => setSelectedEvent({
-                                        id: log.id,
+                                        id: String(log.id),
                                         timestamp: log.timestamp,
                                         // action property removed from here, defined below
-                                        risk_score: (log.risk_score * 100).toString(),
+                                        risk_score: log.risk_score * 100,
                                         source_ip: log.source_ip,
                                         country: log.geo_country,
                                         geo_city: 'Unknown', // Mapped

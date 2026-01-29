@@ -1,6 +1,6 @@
 import { useSocketStore } from '../store/useSocketStore';
 import { format } from 'date-fns';
-import { X, AlertTriangle, Code2, TrendingDown, Activity, ShieldBan, ShieldCheck, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { X, AlertTriangle, Code2, TrendingDown, Activity, ShieldBan, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceDot } from 'recharts';
 import { useState } from 'react';
 

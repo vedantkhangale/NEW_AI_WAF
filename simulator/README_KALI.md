@@ -2,49 +2,41 @@
 
 ## 🎯 Quick Start Guide
 
-Your WAF is running on: **10.54.84.234**
-Your simulator will run from: **Kali Linux VM**
+This guide shows you how to run the **Kali Linux attack simulator** against your AegisX WAF installation.
+
+**Current Simulator**: `kali_sim.py`
+**Target WAF**: Configure in the script (default: `http://localhost`)
 
 ---
 
 ## 📋 Step 1: Transfer the Script to Kali Linux
 
-You have several options:
+### Option A: Clone from GitHub (Recommended)
+```bash
+# Clone the repository
+git clone https://github.com/vedantkhangale/NEW_AI_WAF.git
+cd NEW_AI_WAF/simulator
+```
 
-### Option A: Direct Copy (Recommended)
+### Option B: Direct Copy
 If you have shared folders or can access Windows from Kali:
 
 ```bash
 # From Kali Linux terminal
-# If Windows drive is mounted (e.g., /mnt/d/ or /media/sf_D_DRIVE/)
-cp /mnt/d/REVOX_AI_WAF/simulator/global_attack_sim.py ~/
-```
-
-### Option B: Use SCP (Secure Copy)
-From your Kali Linux VM:
-
-```bash
-# Replace <WINDOWS_IP> with your Windows host IP
-scp user@<WINDOWS_IP>:/d/REVOX_AI_WAF/simulator/global_attack_sim.py ~/
+# If Windows drive is mounted (e.g., /mnt/d/)
+cp /mnt/d/REVOX_AI_WAF/simulator/kali_sim.py ~/
 ```
 
 ### Option C: Manual Copy/Paste
-1. On Windows: Open `global_attack_sim.py` in notepad
+1. On Windows: Open `kali_sim.py` in notepad
 2. Select All (Ctrl+A), Copy (Ctrl+C)
-3. On Kali: Create new file: `nano ~/global_attack_sim.py`
+3. On Kali: Create new file: `nano ~/kali_sim.py`
 4. Paste (Ctrl+Shift+V)
 5. Save (Ctrl+O, Enter, Ctrl+X)
-
-### Option D: Download from GitHub (if you push it)
-```bash
-wget https://raw.githubusercontent.com/YOUR_REPO/global_attack_sim.py
-```
 
 ---
 
 ## 📦 Step 2: Install Python Dependencies
-
-Kali Linux usually has Python 3 pre-installed. Install the required library:
 
 ```bash
 # Update package list
@@ -53,136 +45,184 @@ sudo apt update
 # Install pip if not installed
 sudo apt install python3-pip -y
 
-# Install requests library
-pip3 install requests
+# Install required libraries
+pip3 install flask requests
 ```
 
 ---
 
-## 🔧 Step 3: Verify Network Connectivity
+## 🔧 Step 3: Configure the Target WAF
 
-**CRITICAL**: Your Kali VM must be able to reach the WAF host!
+Edit `kali_sim.py` to set your WAF target:
 
 ```bash
-# Test connectivity
-ping 10.54.84.234
+nano ~/kali_sim.py
+```
+
+Find and modify this line:
+```python
+WAF_TARGET = os.getenv('TARGET_URL', 'http://YOUR_WAF_IP_HERE')
+```
+
+Replace with your WAF's IP or hostname, for example:
+```python
+WAF_TARGET = os.getenv('TARGET_URL', 'http://192.168.1.100')
+# Or if running on same machine:
+WAF_TARGET = os.getenv('TARGET_URL', 'http://localhost')
+```
+
+---
+
+## ✅ Step 4: Verify Network Connectivity
+
+**CRITICAL**: Your Kali VM must be able to reach the WAF!
+
+```bash
+# Get your WAF IP (if running on Windows, run ipconfig on Windows)
+# Then from Kali, test connectivity
+ping YOUR_WAF_IP
 
 # Expected output:
-# 64 bytes from 10.54.84.234: icmp_seq=1 ttl=128 time=1.23 ms
+# 64 bytes from YOUR_WAF_IP: icmp_seq=1 ttl=128 time=1.23 ms
 # ✓ If you see replies, you're good to go!
 
 # If ping fails, check:
 # 1. VM network adapter set to "Bridged" (not NAT)
 # 2. Windows Firewall allows incoming on port 80
-# 3. Docker containers are running on Windows
+# 3. Docker containers are running on Windows (docker ps)
 ```
 
 ### Verify WAF is Accessible
 
 ```bash
 # Quick HTTP test
-curl http://10.54.84.234
+curl http://YOUR_WAF_IP
 
-# Expected: HTML response or "Request blocked by WAF"
+# Expected: HTML response or WAF message
 # If connection refused: WAF is not running or firewall blocking
 ```
 
 ---
 
-## 🚀 Step 4: Run the Simulator
+## 🚀 Step 5: Run the Simulator
 
 ```bash
 # Navigate to script location
+cd ~/NEW_AI_WAF/simulator
+# Or if you copied manually:
 cd ~
 
-# Make executable (optional)
-chmod +x global_attack_sim.py
+# Run the simulator on port 5001 (Kali mode)
+python3 kali_sim.py
+```
 
-# Run the simulator!
-python3 global_attack_sim.py
+The simulator will start on **http://0.0.0.0:5001**
+
+---
+
+## � Step 6: Access the Web Interface
+
+### From Kali VM:
+```bash
+# Open browser in Kali
+firefox http://localhost:5001
+```
+
+### From Windows Host:
+Find your Kali VM's IP:
+```bash
+# On Kali, run:
+ip addr show | grep inet
+```
+
+Then open browser on Windows:
+```
+http://KALI_VM_IP:5001
 ```
 
 ---
 
-## 🎬 Expected Output
+## 🎬 Using the Simulator Web Interface
 
-You should see colorful Matrix-style output like this:
+Once opened, you'll see:
 
-```
-================================================================================
-   ___           _     __  __    _____                 _       _             
-  / _ \         (_)   |  \/  |  / ____|               | |     | |            
- | |_| | ___  __ _ ___ | \  / || (___   _   _   __ _ | |_ ___  _ __  
- |  _  |/ _ \/ _` |/ __|| |\/| | \___ \ | | | | / _` || __/ _ \| '__| 
- | | | |  __/ (_| | \__ \| |  | | ____) || |_| || (_| || || (_) | |    
- |_| |_|\___|\___, |/____/|_|  |_||_____/  \__, | \__,_| \__\___/|_|    
-              __/ |                         __/ |                        
-             |___/                         |___/
+1. **Attack Selection Grid**: Click to select attack type
+   - SQL Injection 💉
+   - XSS Attack 🔥
+   - Path Traversal 📂
+   - SSRF 🌐
+   - Legitimate Traffic ✅
+   - Traffic Flood 🌊
 
-Global Attack Simulator - Distributed Geo-Spoofing Demo
-⚠️  WARNING: FOR DEMONSTRATION PURPOSES ONLY
+2. **Configuration Panel**:
+   - **Source Country**: Select attacker's origin country
+   - **Custom IP**: Override with specific IP (optional)
 
-Target: http://10.54.84.234
-Threads: 5 concurrent attackers
-Countries: 7 (China, Russia, United States, Brazil, India, South Korea, Germany)
-================================================================================
+3. **Launch Buttons**:
+   - **🚀 Launch Single Attack**: Send one attack
+   - **💥 Launch Batch (10x)**: Send 10 attacks rapidly
 
-[INIT] Testing connection to http://10.54.84.234...
-✓ WAF is reachable!
-
-[START] Launching attack simulation...
-
-[02:35:15] [001] 🇨🇳 China (202.106.0.20    ) → SQL Injection         → /?id=1' OR '1'='1                     ✗ BLOCKED
-[02:35:17] [002] 🇷🇺 Russia (109.207.13.5   ) → XSS Attack           → /?name=<script>alert('XSS')</scri... ✗ BLOCKED
-[02:35:19] [003] 🇺🇸 United States (8.8.8.8) → Legitimate           → /about                                 ✓ ALLOWED
-[02:35:21] [004] 🇧🇷 Brazil (189.6.0.1      ) → Path Traversal       → /../../../etc/passwd                  ✗ BLOCKED
-...
-```
-
-Meanwhile, on your **Windows Dashboard** (http://localhost:3000):
-- **Global Attack Map**: Arrows appear from China → India, Russia → India, USA → India
-- **Recent Events**: Shows attacks with correct source countries
-- **Top IPs**: Lists 202.106.0.20 (Beijing), 109.207.13.5 (Moscow), etc.
+4. **Results Log**: Shows real-time results with:
+   - Attack type
+   - Source IP and country
+   - **Payload used** (newly added!)
+   - Status: BLOCKED 🛡️ or ALLOWED ⚠️
 
 ---
 
-## 🔥 Advanced: Customize the Attacks
+## 🔥 Available Attack Types
 
-### Increase Attack Rate
-Edit the script on Kali:
+### 1. SQL Injection 💉
+**Payloads**:
+- `/?id=1' OR '1'='1`
+- `/?id=1 UNION SELECT * FROM users`
+- `/?value=1'; DROP TABLE users--`
 
-```bash
-nano ~/global_attack_sim.py
-```
+### 2. XSS Attack 🔥
+**Payloads**:
+- `/?name=<script>alert('XSS')</script>`
+- `/?q=<img src=x onerror=alert(1)>`
+- `/?search=<svg onload=alert('XSS')>`
 
-Change these lines:
-```python
-NUM_THREADS = 10      # More concurrent threads
-ATTACK_INTERVAL = 1   # Faster attacks (1 second)
-TOTAL_ATTACKS = 100   # More total attacks
-```
+### 3. Path Traversal 📂
+**Payloads**:
+- `/../../../etc/passwd`
+- `/../../windows/win.ini`
+- `/?file=../../../etc/shadow`
 
-### Add Your Own Attack Patterns
-```python
-ATTACK_PATTERNS = {
-    "My Custom Attack": [
-        "/custom?payload=malicious",
-        "/admin?cmd=whoami",
-    ]
-}
-```
+### 4. SSRF 🌐
+**Payloads**:
+- `http://169.254.169.254/latest/meta-data/`
+- `http://localhost:6379`
+- `http://127.0.0.1:22`
+- `gopher://127.0.0.1:25`
 
-### Run in Background
-```bash
-# Run in background with nohup
-nohup python3 global_attack_sim.py > attack_log.txt 2>&1 &
+### 5. Legitimate Traffic ✅
+**Payloads**:
+- `/products?id=123`
+- `/search?q=laptop`
+- `/login`
+- `/contact`
 
-# Check if running
-ps aux | grep global_attack
+### 6. Traffic Flood 🌊
+**Payloads**:
+- Rapid legitimate requests
+- `/api/data`, `/images/logo.png`
+- `/large-file.zip`
 
-# View live output
-tail -f attack_log.txt
-```
+---
+
+## � Monitoring on Dashboard
+
+While running attacks, monitor your **AegisX Dashboard** (http://localhost:3000):
+
+- **🌍 Global Attack Map**: See arrows from attack source countries
+- **📋 Events Log**: View all requests with payloads
+- **📊 Analytics**: 
+  - Real-time request volume
+  - Attack type distribution
+  - **Blocked IPs Table** (shows all blocked attacks)
+- **🔍 Inspector Panel**: Click any event for detailed analysis
 
 ---
 
@@ -190,8 +230,8 @@ tail -f attack_log.txt
 
 ### Connection Refused
 ```bash
-# Check if WAF host is reachable
-telnet 10.54.84.234 80
+# Check if WAF is reachable
+telnet YOUR_WAF_IP 80
 
 # If fails: Windows firewall is blocking
 # Solution on Windows:
@@ -200,74 +240,74 @@ telnet 10.54.84.234 80
 # 3. Port → TCP 80 → Allow
 ```
 
-### Module Not Found: requests
+### Module Not Found
 ```bash
-# Install again
-pip3 install --user requests
+# Install dependencies
+pip3 install --user flask requests
 
 # Or use sudo
-sudo pip3 install requests
+sudo pip3 install flask requests
+```
+
+### Port 5001 Already in Use
+```bash
+# Find process using port
+sudo lsof -i :5001
+
+# Kill the process
+sudo kill -9 PID
+
+# Or change port in kali_sim.py:
+# app.run(host='0.0.0.0', port=5002)
 ```
 
 ### VM Can't Reach Windows Host
+
 **Check VM Network Settings:**
 
 1. **VirtualBox**: Settings → Network → Attached to: "Bridged Adapter"
 2. **VMware**: Edit → Virtual Network Editor → Bridge to actual network
 3. **Hyper-V**: Virtual Switch Manager → External Network
 
-Then restart VM and try `ping 10.54.84.234` again.
+Then restart VM and try `ping YOUR_WAF_IP` again.
 
-### Script Permission Denied
-```bash
-chmod +x global_attack_sim.py
-# Or just use: python3 global_attack_sim.py
+---
+
+## 🎓 Architecture Overview
+
+```
+┌─────────────────┐
+│   Kali Linux    │
+│  (Attack Sim)   │
+│  Port: 5001     │
+└────────┬────────┘
+         │ HTTP Requests
+         │ (with spoofed IPs)
+         ▼
+┌─────────────────┐
+│  Windows Host   │
+├─────────────────┤
+│  Nginx (Port 80)│◄── Entry Point
+│      ↓          │
+│  WAF Engine     │◄── AI Analysis
+│      ↓          │
+│  PostgreSQL     │◄── Logging
+│      ↓          │
+│  Dashboard:3000 │◄── Visualization
+└─────────────────┘
 ```
 
 ---
 
-## 📊 Demo Script for Presentations
+## 🚨 Security Features Being Tested
 
-Perfect flow for showing your project:
-
-1. **Open 3 Terminal Windows on Kali**:
-   - Terminal 1: `watch -n 1 curl -s http://10.54.84.234` (monitor WAF)
-   - Terminal 2: `python3 global_attack_sim.py` (run attacks)
-   - Terminal 3: `tail -f ~/attack_log.txt` (if running in background)
-
-2. **Open Dashboard on Windows**:
-   - Browser: http://localhost:3000
-   - Full screen the Global Attack Map
-
-3. **Start Simulator**:
-   - Run the script
-   - Watch map light up with arrows from multiple countries
-
-4. **Explain the Architecture**:
-   - "This is a distributed WAF with AI-powered threat detection"
-   - "The Kali VM simulates attacks from 7 countries"
-   - "The WAF uses GeoIP to track attack origins"
-   - "Notice the arrows showing attack paths in real-time"
-
----
-
-## 🎓 Why This is Impressive
-
-**What you're demonstrating:**
-
-✅ **Multi-tier Architecture**: Nginx → WAF Engine → AI Service → Dashboard
-✅ **Distributed Systems**: Cross-VM communication
-✅ **Real-time Analytics**: WebSocket updates, live maps
-✅ **Security Patterns**: IP spoofing detection, geo-blocking
-✅ **DevOps**: Docker orchestration, microservices
-✅ **Networking**: Bridged VMs, firewall configuration
-✅ **Full-stack**: Python backend, React frontend, Lua middleware
-
-Perfect for:
-- University final year projects
-- Security internship applications
-- DevSecOps portfolio
-- Cybersecurity competitions
+✅ **Signature Detection**: Pattern matching for known attacks
+✅ **AI-Powered Analysis**: Machine learning threat detection
+✅ **GeoIP Tracking**: Attack origin identification
+✅ **Rate Limiting**: DDoS protection
+✅ **IP Blacklisting**: Automatic blocking of repeat offenders
+✅ **Real-time Monitoring**: WebSocket updates
+✅ **Attack Classification**: Categorization by type
 
 ---
 
@@ -276,30 +316,48 @@ Perfect for:
 ```bash
 # ON KALI LINUX:
 
-# Test connectivity
-ping 10.54.84.234
+# Clone repository
+git clone https://github.com/vedantkhangale/NEW_AI_WAF.git
 
-# Copy script
-cp /mnt/d/REVOX_AI_WAF/simulator/global_attack_sim.py ~/
-
-# Install dependency
-pip3 install requests
+# Install dependencies
+pip3 install flask requests
 
 # Run simulator
-python3 ~/global_attack_sim.py
+cd NEW_AI_WAF/simulator
+python3 kali_sim.py
 
-# Run in background
-nohup python3 ~/global_attack_sim.py > attack.log 2>&1 &
+# Access web interface
+firefox http://localhost:5001
 
-# Stop background process
-pkill -f global_attack_sim
+# Check Kali IP (for Windows access)
+ip addr show | grep inet
+
+# Test WAF connectivity
+curl http://YOUR_WAF_IP
+```
+
+```powershell
+# ON WINDOWS HOST:
+
+# Start WAF stack
+cd D:\REVOX_AI_WAF
+docker-compose up -d
+
+# Check services
+docker ps
+
+# View WAF logs
+docker logs aegisx-waf-engine --tail 50
+
+# Access dashboard
+http://localhost:3000
 ```
 
 ---
 
 ## 🚨 Legal Disclaimer
 
-**IMPORTANT**: This simulator is designed to test YOUR OWN WAF installation only.
+**IMPORTANT**: This simulator is designed to test **YOUR OWN WAF** installation only.
 
 - ✅ **Legal**: Testing your own infrastructure
 - ❌ **Illegal**: Targeting systems you don't own
@@ -309,4 +367,36 @@ The simulated "attacks" are harmless test strings designed to trigger WAF rules.
 
 ---
 
-**Ready to go! Let me know if you hit any issues! 🚀**
+## 🎯 Demo Tips
+
+Perfect flow for presentations:
+
+1. **Start WAF Stack** (Windows):
+   ```powershell
+   docker-compose up -d
+   ```
+
+2. **Open Dashboard** (Windows):
+   - Browser: http://localhost:3000
+   - Full screen the Global Attack Map
+
+3. **Launch Simulator** (Kali):
+   ```bash
+   python3 kali_sim.py
+   firefox http://localhost:5001
+   ```
+
+4. **Run Various Attacks**:
+   - Start with Legitimate Traffic → See ALLOWED ✅
+   - Try SQL Injection → See BLOCKED 🛡️
+   - Launch XSS Attack → See BLOCKED 🛡️
+   - Watch the map light up in real-time!
+
+5. **Show Analytics Tab**:
+   - Real request volumes
+   - Attack type distribution
+   - Blocked IPs table
+
+---
+
+**Ready to test your WAF! Happy hacking! 🚀🛡️**
