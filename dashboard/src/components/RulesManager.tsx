@@ -28,15 +28,9 @@ export default function RulesManager() {
 
     const fetchRulesData = async () => {
         try {
-            // Fetch threshold, rules, and IP lists
-            // For now, using mock data - will connect to backend
-            setThreshold(0.7);
-            setCustomRules([
-                { id: 1, name: 'Block SQL Injection', pattern: '(union|select|drop|insert)', target: 'uri', action: 'block', enabled: true },
-                { id: 2, name: 'Block XSS Attempts', pattern: '<script.*?>', target: 'body', action: 'block', enabled: true },
-            ]);
-            setTrustedIPs(['192.168.1.0/24', '10.0.0.5/32']);
-            setBannedIPs(['203.0.113.0/24', '198.51.100.42/32']);
+            const res = await fetch('/api/rules');
+            const data = await res.json();
+            setCustomRules(data.rules || []);
         } catch (error) {
             console.error('Failed to fetch rules:', error);
         }
@@ -108,7 +102,7 @@ export default function RulesManager() {
     };
 
     // Add/Update custom rule
-    const saveCustomRule = () => {
+    const saveCustomRule = async () => {
         if (!editingRule) return;
 
         const validation = validateRegex(editingRule.pattern);
@@ -117,20 +111,41 @@ export default function RulesManager() {
             return;
         }
 
-        if (editingRule.id) {
-            // Update existing
-            setCustomRules(rules => rules.map(r => r.id === editingRule.id ? editingRule : r));
-        } else {
-            // Add new
-            setCustomRules(rules => [...rules, { ...editingRule, id: Date.now() }]);
+        try {
+            if (editingRule.id) {
+                // Update existing via PUT
+                const res = await fetch(`/api/rules/${editingRule.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(editingRule),
+                });
+                const updated = await res.json();
+                setCustomRules(rules => rules.map(r => r.id === editingRule.id ? updated : r));
+            } else {
+                // Create new via POST
+                const res = await fetch('/api/rules', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(editingRule),
+                });
+                const created = await res.json();
+                setCustomRules(rules => [...rules, created]);
+            }
+            setEditingRule(null);
+        } catch (error) {
+            console.error('Failed to save rule:', error);
+            alert('Failed to save rule. Check network connection.');
         }
-        setEditingRule(null);
     };
 
     // Delete custom rule
-    const deleteRule = (id: number) => {
-        if (confirm('Are you sure you want to delete this rule?')) {
+    const deleteRule = async (id: number) => {
+        if (!confirm('Are you sure you want to delete this rule?')) return;
+        try {
+            await fetch(`/api/rules/${id}`, { method: 'DELETE' });
             setCustomRules(rules => rules.filter(r => r.id !== id));
+        } catch (error) {
+            console.error('Failed to delete rule:', error);
         }
     };
 

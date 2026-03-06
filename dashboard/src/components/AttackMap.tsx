@@ -44,28 +44,29 @@ export default function AttackMap() {
         }
 
         let animationFrame = 0;
+        let rafId: number;
 
-        function animate() {
-            ctx.clearRect(0, 0, width, height);
+        function animate(c: CanvasRenderingContext2D) {
+            c.clearRect(0, 0, width, height);
 
             // Draw world map outline (simplified)
-            ctx.fillStyle = '#1e293b';
-            ctx.fillRect(0, 0, width, height);
+            c.fillStyle = '#1e293b';
+            c.fillRect(0, 0, width, height);
 
             // Draw grid
-            ctx.strokeStyle = '#334155';
-            ctx.lineWidth = 0.5;
+            c.strokeStyle = '#334155';
+            c.lineWidth = 0.5;
             for (let i = 0; i < width; i += 40) {
-                ctx.beginPath();
-                ctx.moveTo(i, 0);
-                ctx.lineTo(i, height);
-                ctx.stroke();
+                c.beginPath();
+                c.moveTo(i, 0);
+                c.lineTo(i, height);
+                c.stroke();
             }
             for (let i = 0; i < height; i += 40) {
-                ctx.beginPath();
-                ctx.moveTo(0, i);
-                ctx.lineTo(width, i);
-                ctx.stroke();
+                c.beginPath();
+                c.moveTo(0, i);
+                c.lineTo(width, i);
+                c.stroke();
             }
 
             // Draw target (India)
@@ -73,29 +74,29 @@ export default function AttackMap() {
             const targetPulse = Math.sin(animationFrame * 0.05) * 5 + 10;
 
             // Target glow
-            const gradient = ctx.createRadialGradient(target.x, target.y, 0, target.x, target.y, targetPulse);
+            const gradient = c.createRadialGradient(target.x, target.y, 0, target.x, target.y, targetPulse);
             gradient.addColorStop(0, 'rgba(59, 130, 246, 0.8)');
             gradient.addColorStop(1, 'rgba(59, 130, 246, 0)');
-            ctx.fillStyle = gradient;
-            ctx.beginPath();
-            ctx.arc(target.x, target.y, targetPulse, 0, Math.PI * 2);
-            ctx.fill();
+            c.fillStyle = gradient;
+            c.beginPath();
+            c.arc(target.x, target.y, targetPulse, 0, Math.PI * 2);
+            c.fill();
 
             // Target marker
-            ctx.fillStyle = '#3b82f6';
-            ctx.beginPath();
-            ctx.arc(target.x, target.y, 4, 0, Math.PI * 2);
-            ctx.fill();
+            c.fillStyle = '#3b82f6';
+            c.beginPath();
+            c.arc(target.x, target.y, 4, 0, Math.PI * 2);
+            c.fill();
 
             // Draw attacks
             attacks.forEach((attack, index) => {
                 const source = latLonToXY(attack.source_lat, attack.source_lon);
 
                 // Attack source marker
-                ctx.fillStyle = '#ef4444';
-                ctx.beginPath();
-                ctx.arc(source.x, source.y, 3, 0, Math.PI * 2);
-                ctx.fill();
+                c.fillStyle = '#ef4444';
+                c.beginPath();
+                c.arc(source.x, source.y, 3, 0, Math.PI * 2);
+                c.fill();
 
                 // Animated arc
                 const progress = ((animationFrame + index * 20) % 100) / 100;
@@ -103,40 +104,44 @@ export default function AttackMap() {
                 // Calculate control point for arc
                 const midX = (source.x + target.x) / 2;
                 const midY = (source.y + target.y) / 2 - 50;
+                void midX; void midY; // suppress unused var warning
 
-                ctx.strokeStyle = `rgba(251, 146, 60, ${1 - progress})`;
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.moveTo(source.x, source.y);
+                c.strokeStyle = `rgba(251, 146, 60, ${1 - progress})`;
+                c.lineWidth = 2;
+                c.beginPath();
+                c.moveTo(source.x, source.y);
 
                 // Draw quadratic curve
                 const currentX = source.x + (target.x - source.x) * progress;
                 const currentY = source.y + (target.y - source.y) * progress - Math.sin(progress * Math.PI) * 50;
 
-                ctx.lineTo(currentX, currentY);
-                ctx.stroke();
+                c.lineTo(currentX, currentY);
+                c.stroke();
 
                 // Draw moving point
-                ctx.fillStyle = '#fb923c';
-                ctx.beginPath();
-                ctx.arc(currentX, currentY, 3, 0, Math.PI * 2);
-                ctx.fill();
+                c.fillStyle = '#fb923c';
+                c.beginPath();
+                c.arc(currentX, currentY, 3, 0, Math.PI * 2);
+                c.fill();
 
                 // Glow
-                const glowGradient = ctx.createRadialGradient(currentX, currentY, 0, currentX, currentY, 10);
+                const glowGradient = c.createRadialGradient(currentX, currentY, 0, currentX, currentY, 10);
                 glowGradient.addColorStop(0, 'rgba(251, 146, 60, 0.8)');
                 glowGradient.addColorStop(1, 'rgba(251, 146, 60, 0)');
-                ctx.fillStyle = glowGradient;
-                ctx.beginPath();
-                ctx.arc(currentX, currentY, 10, 0, Math.PI * 2);
-                ctx.fill();
+                c.fillStyle = glowGradient;
+                c.beginPath();
+                c.arc(currentX, currentY, 10, 0, Math.PI * 2);
+                c.fill();
             });
 
             animationFrame++;
-            requestAnimationFrame(animate);
+            rafId = requestAnimationFrame(() => animate(c));
         }
 
-        animate();
+        animate(ctx);
+
+        // Cleanup: cancel animation on unmount or when attacks change
+        return () => cancelAnimationFrame(rafId);
     }, [attacks]);
 
     return (

@@ -435,6 +435,63 @@ async def whitelist_ip(request: WhitelistRequest):
         logger.error(f"Error whitelisting IP: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# ============================================================================
+# Rules Management API
+# ============================================================================
+
+# In-memory rules store (persists for container lifecycle)
+_custom_rules: List[Dict[str, Any]] = [
+    {"id": 1, "name": "Block SQL Injection", "pattern": "(union|select|drop|insert|update|delete)", "target": "uri", "action": "block", "enabled": True},
+    {"id": 2, "name": "Block XSS Attempts", "pattern": "<script|javascript:|onerror=", "target": "uri", "action": "block", "enabled": True},
+]
+_rules_counter: int = 3
+
+class RuleModel(BaseModel):
+    name: str
+    pattern: str
+    target: str = "uri"  # uri | header | body
+    action: str = "block"  # block | challenge | allow
+    enabled: bool = True
+
+@app.get("/api/rules")
+async def get_rules():
+    """Get all custom WAF rules"""
+    return {"rules": _custom_rules, "count": len(_custom_rules)}
+
+@app.post("/api/rules")
+async def create_rule(rule: RuleModel):
+    """Create a new custom WAF rule"""
+    global _rules_counter
+    new_rule = {
+        "id": _rules_counter,
+        **rule.dict()
+    }
+    _custom_rules.append(new_rule)
+    _rules_counter += 1
+    logger.info(f"Custom rule created: {rule.name}")
+    return new_rule
+
+@app.put("/api/rules/{rule_id}")
+async def update_rule(rule_id: int, rule: RuleModel):
+    """Update an existing WAF rule"""
+    for i, r in enumerate(_custom_rules):
+        if r["id"] == rule_id:
+            _custom_rules[i] = {"id": rule_id, **rule.dict()}
+            logger.info(f"Custom rule updated: {rule_id}")
+            return _custom_rules[i]
+    raise HTTPException(status_code=404, detail="Rule not found")
+
+@app.delete("/api/rules/{rule_id}")
+async def delete_rule(rule_id: int):
+    """Delete a WAF rule"""
+    global _custom_rules
+    orig_len = len(_custom_rules)
+    _custom_rules = [r for r in _custom_rules if r["id"] != rule_id]
+    if len(_custom_rules) == orig_len:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    logger.info(f"Custom rule deleted: {rule_id}")
+    return {"status": "deleted", "id": rule_id}
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket for real-time updates to dashboard"""

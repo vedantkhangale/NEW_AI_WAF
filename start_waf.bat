@@ -43,12 +43,9 @@ docker-compose down --remove-orphans 2>nul
 echo [OK] Cleanup complete
 echo.
 
-REM Build and start CORE services only (skip dashboard)
-echo [4/5] Starting AegisX WAF core services...
-echo NOTE: Dashboard is disabled due to build issues
-echo       Core WAF functionality works perfectly!
+echo [4/5] Starting AegisX WAF services...
 echo.
-docker-compose up -d redis waf-engine ai-service nginx-proxy simulator
+docker-compose up -d redis waf-engine ai-service nginx-proxy simulator dashboard
 
 if errorlevel 1 (
     echo.
@@ -72,8 +69,9 @@ echo ========================================
 echo   AEGISX WAF STARTED SUCCESSFULLY!
 echo ========================================
 echo.
-echo   Core Services Running:
-echo   ----------------------
+echo   Services Running:
+echo   -----------------
+echo   Dashboard:   http://localhost:3000
 echo   WAF Engine:  http://localhost:5000
 echo   Nginx Proxy: http://localhost:80
 echo   Simulator:   http://localhost:8080
@@ -83,9 +81,6 @@ echo   --------------
 echo   Requests: http://localhost:5000/api/requests
 echo   Stats:    http://localhost:5000/api/stats
 echo   Health:   http://localhost:5000/health
-echo.
-echo   NOTE: Dashboard disabled (build error)
-echo         All WAF protection is active!
 echo.
 echo ========================================
 echo.

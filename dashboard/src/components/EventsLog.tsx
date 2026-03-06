@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Search, RefreshCw, AlertTriangle, Activity } from 'lucide-react';
+import { Search, Activity, AlertTriangle } from 'lucide-react';
 import { useSocketStore } from '../store/useSocketStore';
 
 interface RequestLog {
@@ -19,32 +19,32 @@ interface RequestLog {
 
 export default function EventsLog() {
     const [logs, setLogs] = useState<RequestLog[]>([]);
-    const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('ALL');
     const [search, setSearch] = useState('');
+    const [isLive, setIsLive] = useState(true);
+    const [total, setTotal] = useState(0);
     const { setSelectedEvent } = useSocketStore();
 
     const fetchLogs = async () => {
-        setLoading(true);
         try {
-            const params = new URLSearchParams({ limit: '100' });
+            const params = new URLSearchParams({ limit: '500' });
             if (filter !== 'ALL') params.append('action', filter);
 
             const response = await fetch(`/api/requests?${params}`);
             const data = await response.json();
-            setLogs(data.requests);
+            setLogs(data.requests || []);
+            setTotal(data.count || 0);
         } catch (error) {
             console.error('Failed to fetch logs', error);
-        } finally {
-            setLoading(false);
         }
     };
 
     useEffect(() => {
         fetchLogs();
+        if (!isLive) return;
         const interval = setInterval(fetchLogs, 5000); // Auto-refresh every 5s
         return () => clearInterval(interval);
-    }, [filter]);
+    }, [filter, isLive]);
 
     const getActionBadge = (action: string) => {
         switch (action) {
@@ -71,20 +71,25 @@ export default function EventsLog() {
         <div className="p-6 space-y-6 bg-slate-950/50 min-h-screen text-slate-100">
             {/* Header */}
             <div className="flex items-center justify-between">
-                <div>
+            <div>
                     <h2 className="text-2xl font-bold flex items-center gap-2">
                         <Activity className="h-6 w-6 text-blue-400" />
                         Events Log
+                        {isLive && <span className="ml-2 inline-flex items-center gap-1 text-xs text-green-400 font-normal"><span className="w-2 h-2 bg-green-400 rounded-full animate-pulse inline-block" />LIVE</span>}
                     </h2>
-                    <p className="text-slate-400">Real-time WAF decision logs</p>
+                    <p className="text-slate-400">{total > 0 ? `${total.toLocaleString()} events stored in database` : 'Real-time WAF decision logs'}</p>
                 </div>
                 <div className="flex gap-2">
                     <button
-                        onClick={fetchLogs}
-                        className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-slate-700 bg-slate-900 hover:bg-slate-800 h-9 px-3"
+                        onClick={() => setIsLive(l => !l)}
+                        className={`inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-3 border transition-colors ${
+                            isLive
+                                ? 'border-green-500/50 bg-green-500/10 text-green-400 hover:bg-green-500/20'
+                                : 'border-slate-700 bg-slate-900 text-slate-400 hover:bg-slate-800'
+                        }`}
                     >
-                        <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                        Refresh
+                        <span className={`w-2 h-2 rounded-full mr-2 ${isLive ? 'bg-green-400 animate-pulse' : 'bg-slate-500'}`} />
+                        {isLive ? 'Live' : 'Paused'}
                     </button>
                 </div>
             </div>

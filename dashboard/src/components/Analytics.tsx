@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
 import {
-    BarChart,
-    Bar,
     XAxis,
     YAxis,
     CartesianGrid,
@@ -117,8 +115,8 @@ export default function Analytics() {
         });
         const peakRPM = Math.max(...Array.from(minuteMap.values()), 0);
 
-        // Calculate average latency (if available in events)
-        const latencies = events.filter(e => e.latency_ms).map(e => e.latency_ms || 0);
+        // Calculate average latency (placeholder — field not in AttackEvent type)
+        const latencies: number[] = [];
         const avgLatency = latencies.length > 0
             ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length)
             : 0;
@@ -216,7 +214,7 @@ export default function Analytics() {
                                         paddingAngle={5}
                                         dataKey="value"
                                     >
-                                        {attacksData.map((entry: any, index: number) => (
+                                        {attacksData.map((_entry: any, index: number) => (
                                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                         ))}
                                     </Pie>
