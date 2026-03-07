@@ -34,9 +34,11 @@ class GeoIPResolver:
         Resolve IP address to geographic location
         Returns dict with: country_code, city, latitude, longitude
         """
-        # specialized mock logic for local IPs
-        if ip_address in ['127.0.0.1', 'localhost'] or ip_address.startswith('192.168.') or ip_address.startswith('172.'):
-             return self._mock_resolve(ip_address)
+        # Default mock logic or fallback
+        if ip_address in ['127.0.0.1', 'localhost'] or ip_address.startswith('192.168.') or ip_address.startswith('172.') or ip_address.startswith('10.'):
+             response = self._default_response()
+             response['is_private'] = True
+             return response
 
         # Try local DB first
         if self.reader:
@@ -51,69 +53,12 @@ class GeoIPResolver:
                     'is_private': False
                 }
             except (geoip2.errors.AddressNotFoundError, ValueError):
-                pass # Try external
+                pass # Not found
             except Exception as e:
                 logger.error(f"Error resolving IP {ip_address} locally: {e}")
 
-        # Fallback to external API if DB missing or IP not found
-        try:
-            return self._resolve_external(ip_address)
-        except Exception as e:
-            logger.warning(f"External resolution failed for {ip_address}: {e}")
-            return self._mock_resolve(ip_address)
-    
-    def _resolve_external(self, ip_address: str) -> Dict[str, Any]:
-        """Resolve using external API (cached)"""
-        return get_external_geo(ip_address)
-
-    def _mock_resolve(self, ip_address: str) -> Dict[str, Any]:
-        """Mock resolution - Deterministic based on IP prefix"""
-        # Prefixes for simulator to use
-        # ... (keep existing mock logic) ...
-        
-        mock_db = {
-            "10.1.": {"code": "US", "name": "United States", "city": "San Francisco", "lat": 37.77, "lon": -122.41},
-            "10.2.": {"code": "CN", "name": "China", "city": "Shanghai", "lat": 31.23, "lon": 121.47},
-            "10.3.": {"code": "RU", "name": "Russia", "city": "Moscow", "lat": 55.75, "lon": 37.61},
-            "10.4.": {"code": "BR", "name": "Brazil", "city": "Sao Paulo", "lat": -23.55, "lon": -46.63},
-            "10.5.": {"code": "DE", "name": "Germany", "city": "Berlin", "lat": 52.52, "lon": 13.40},
-            "10.6.": {"code": "IN", "name": "India", "city": "Mumbai", "lat": 19.07, "lon": 72.87},
-            "10.7.": {"code": "JP", "name": "Japan", "city": "Tokyo", "lat": 35.67, "lon": 139.65},
-            "10.8.": {"code": "AU", "name": "Australia", "city": "Sydney", "lat": -33.86, "lon": 151.20},
-            "10.9.": {"code": "FR", "name": "France", "city": "Paris", "lat": 48.85, "lon": 2.35},
-            "10.10.": {"code": "GB", "name": "United Kingdom", "city": "London", "lat": 51.50, "lon": -0.12},
-        }
-
-        # Check prefixes
-        for prefix, data in mock_db.items():
-            if ip_address.startswith(prefix):
-                 return {
-                    'country_code': data['code'],
-                    'country_name': data['name'],
-                    'city': data['city'],
-                    'latitude': data['lat'],
-                    'longitude': data['lon'],
-                    'is_private': False
-                }
-
-        # Fallback to hash for other IPs
-        cities = list(mock_db.values())
-        try:
-            octets = [int(p) for p in ip_address.split('.') if p.isdigit()]
-            val = sum(octets)
-        except:
-            val = len(ip_address)
-            
-        city = cities[val % len(cities)]
-        
-        return {
-            'country_code': city['code'],
-            'country_name': city['name'],
-            'city': city['city'],
-            'latitude': city['lat'],
-            'longitude': city['lon'],
-            'is_private': False
-        }
+        # Fallback to default response if DB missing or IP not found
+        return self._default_response()
     
     def _default_response(self) -> Dict[str, Any]:
         """Default response when resolution fails"""
@@ -131,33 +76,3 @@ class GeoIPResolver:
         if self.reader:
             self.reader.close()
             logger.info("GeoIP database closed")
-
-# Independent cached function
-import httpx
-from functools import lru_cache
-
-@lru_cache(maxsize=1024)
-def get_external_geo(ip_address: str) -> Dict[str, Any]:
-    """
-    Fetch geolocation from ip-api.com
-    Cached to avoid rate limits (45 requests/minute limit on free tier)
-    """
-    try:
-        # Use sync client for compatibility with sync resolve method
-        with httpx.Client(timeout=3.0) as client:
-            response = client.get(f"http://ip-api.com/json/{ip_address}")
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('status') == 'success':
-                    return {
-                        'country_code': data.get('countryCode', 'XX'),
-                        'country_name': data.get('country', 'Unknown'),
-                        'city': data.get('city', 'Unknown'),
-                        'latitude': float(data.get('lat', 0.0)),
-                        'longitude': float(data.get('lon', 0.0)),
-                        'is_private': False
-                    }
-    except Exception as e:
-        logger.warning(f"IP-API lookup failed: {e}")
-        
-    raise Exception("External lookup failed")
