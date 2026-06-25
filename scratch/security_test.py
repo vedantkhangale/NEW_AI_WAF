@@ -4,8 +4,8 @@ import json
 import concurrent.futures
 from urllib.parse import urljoin
 
-BASE_URL = "http://localhost"
-API_BASE = "http://localhost:5000"
+BASE_URL = "http://host.docker.internal"
+API_BASE = "http://host.docker.internal:5000"
 
 payloads = {
     "SQLi": "' OR 1=1 --",

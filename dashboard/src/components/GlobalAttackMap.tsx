@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import DeckGL from '@deck.gl/react';
 import { ArcLayer, ScatterplotLayer } from '@deck.gl/layers';
-import { Map } from 'react-map-gl/maplibre';
+import Map from 'react-map-gl';
+import maplibregl from 'maplibre-gl';
 import { useSocketStore } from '../store/useSocketStore';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -69,7 +70,7 @@ export default function GlobalAttackMap() {
             html: `
                 <div style="padding: 8px; background: #0f172a; border: 1px solid #334155; border-radius: 4px; color: white; display: flex; flex-direction: column; gap: 4px; font-family: monospace;">
                     <strong style="color: #60a5fa">${object.source_ip}</strong>
-                    <span>${object.city || 'Unknown'}, ${object.country || 'Unknown'}</span>
+                    <span>${object.geo_city || 'Unknown'}, ${object.geo_country || 'Unknown'}</span>
                     <span style="color: ${(object.risk_score ?? 0) > 80 ? '#f87171' : '#94a3b8'}">Risk: ${object.risk_score ?? 0}% - ${object.attack_type || 'Malicious'}</span>
                 </div>
             `
@@ -93,7 +94,7 @@ export default function GlobalAttackMap() {
                     layers={layers}
                     getTooltip={getTooltip}
                 >
-                    <Map mapStyle={MAP_STYLE} />
+                    <Map mapLib={maplibregl} mapStyle={MAP_STYLE} />
                 </DeckGL>
 
                 {/* Legend */}

